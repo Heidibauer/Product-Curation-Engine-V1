@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
-import { ensureSchema, saveRun } from "@/lib/db";
+import { ensureSchema, saveRun, usingPostgres } from "@/lib/db";
 import { newRun, runPipeline } from "@/lib/agents/orchestrator";
 
 export const runtime = "nodejs";
@@ -23,10 +24,20 @@ export async function POST(req: Request) {
     const run = newRun(brief);
     await saveRun(run);
 
-    // Run the pipeline to completion within this request (Vercel honors
-    // maxDuration). Intermediate steps are persisted as it goes, so a separate
-    // poll of GET /api/runs/[id] shows live progress while this resolves.
-    await runPipeline(run);
+    // Respond immediately with the run id so the browser never waits on the
+    // full pipeline (which can take 30-90s and would otherwise hit the
+    // serverless request timeout -> "failed to fetch"). waitUntil keeps the
+    // function alive to finish the pipeline in the background; the run page
+    // polls GET /api/runs/[id] for live progress.
+    //
+    // NOTE: background processing only works across requests when a real
+    // database is configured. With the in-memory fallback, the background work
+    // happens in an isolated instance the poller can't see, so we run inline.
+    if (usingPostgres) {
+      waitUntil(runPipeline(run));
+    } else {
+      await runPipeline(run);
+    }
 
     return NextResponse.json({ id: run.id, mode: run.mode, status: run.status });
   } catch (err) {
