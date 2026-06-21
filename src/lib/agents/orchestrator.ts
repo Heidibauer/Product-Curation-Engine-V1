@@ -22,7 +22,7 @@ export async function runPipeline(run: Run): Promise<void> {
     run.steps.push(step("Strategizing themes", "Reasoning about subcategories and intent"));
     await saveRun(run);
 
-    const themes = await strategizeThemes(brief, 4);
+    const themes = await strategizeThemes(brief, 3);
     run.themes = themes;
     run.steps.push(
       step("Themes ready", themes.map((t) => t.title).join(" · "))

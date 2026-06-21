@@ -45,14 +45,15 @@ export async function discoverForTheme(theme: Theme): Promise<ProductCandidate[]
     return fixtureProducts(theme.id);
   }
 
-  // Live: fan out across queries and sources in parallel.
+  // Live: fan out across queries and sources in parallel. Capped to keep the
+  // total run well under the serverless time limit. Serper Shopping is fast and
+  // gives us price+rating directly, so we lean on it and use fewer Tavily calls.
   const tasks: Promise<ProductCandidate[]>[] = [];
-  for (const q of theme.searchQueries.slice(0, 3)) {
+  for (const q of theme.searchQueries.slice(0, 2)) {
     tasks.push(serperShopping(q, theme.id, 12));
-    tasks.push(tavilySearch(`${q} review`, theme.id, 4));
   }
   // One organic pass for DTC / editorial coverage.
-  tasks.push(serperOrganic(`best ${theme.title}`, theme.id, 8));
+  tasks.push(serperOrganic(`best ${theme.title}`, theme.id, 6));
 
   const settled = await Promise.allSettled(tasks);
   const all: ProductCandidate[] = [];
@@ -76,7 +77,9 @@ export async function discoverForTheme(theme: Theme): Promise<ProductCandidate[]
     return score(b) - score(a);
   });
 
-  const toEnrich = merged.filter((p) => !p.price || !p.snippet).slice(0, 8);
+  // Enrich only a few of the most promising thin candidates. Page extraction is
+  // the slowest step, so we keep this tight to protect the overall run time.
+  const toEnrich = merged.filter((p) => !p.price || !p.snippet).slice(0, 3);
   await Promise.allSettled(
     toEnrich.map(async (p) => {
       const { context, price } = await tavilyEnrich(p.url);

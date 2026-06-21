@@ -58,11 +58,18 @@ splurge", "the design statement", "the safe default", "the compact choice").
 Flag real problems in redFlags (generic design, dropship signals, weak reviews,
 overpriced, off-brief). ${feedbackBlock(feedback)}`;
 
-  // Batch products into one prompt for efficiency, but cap to keep prompts sane.
-  const batchSize = 10;
-  const evals: Evaluation[] = [];
+  // Split into batches and evaluate them ALL IN PARALLEL. Sequential awaits
+  // were the main time sink (each Claude call is several seconds; 3-4 in a row
+  // blew past the function limit). Running them concurrently keeps total time
+  // close to a single call.
+  const batchSize = 8;
+  const batches: ProductCandidate[][] = [];
   for (let i = 0; i < products.length; i += batchSize) {
-    const batch = products.slice(i, i + batchSize);
+    batches.push(products.slice(i, i + batchSize));
+  }
+
+  const evalArrays = await Promise.all(
+    batches.map(async (batch) => {
     const listing = batch
       .map((p) =>
         JSON.stringify({
@@ -87,6 +94,7 @@ ${listing}
 Return JSON: {"evals":[{"id":"...","aesthetics":0-100,"value":0-100,"quality":0-100,"desirability":0-100,"trendFit":0-100,"rationale":"specific reason it does or doesn't deserve a spot","redFlags":["..."],"collectionRole":"..."}]}
 One entry per product id. No text outside JSON.`;
 
+    const batchEvals: Evaluation[] = [];
     try {
       const out = await askJSON<{ evals: RawEval[] }>({
         system,
@@ -109,13 +117,15 @@ One entry per product id. No text outside JSON.`;
               collectionRole: e.collectionRole || "candidate",
             }
           : heuristicTaste(p, brief);
-        evals.push(fuse(p, taste, brief));
+        batchEvals.push(fuse(p, taste, brief));
       }
     } catch {
-      for (const p of batch) evals.push(fuse(p, heuristicTaste(p, brief), brief));
+      for (const p of batch) batchEvals.push(fuse(p, heuristicTaste(p, brief), brief));
     }
-  }
-  return evals;
+    return batchEvals;
+    })
+  );
+  return evalArrays.flat();
 }
 
 // Used when no LLM is available, or as a per-product fallback. Derives plausible
