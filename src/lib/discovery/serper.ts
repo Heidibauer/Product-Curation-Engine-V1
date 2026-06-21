@@ -3,6 +3,7 @@
 
 import type { ProductCandidate } from "@/lib/types";
 import { retailerFromUrl, retailerLabel, isAcceptableRetailer } from "./retailers";
+import { fetchWithTimeout } from "./http";
 
 const BASE = "https://google.serper.dev";
 
@@ -30,12 +31,12 @@ export async function serperShopping(
 ): Promise<ProductCandidate[]> {
   const key = process.env.SERPER_API_KEY;
   if (!key) return [];
-  const res = await fetch(`${BASE}/shopping`, {
+  const res = await fetchWithTimeout(`${BASE}/shopping`, {
     method: "POST",
     headers: { "X-API-KEY": key, "Content-Type": "application/json" },
     body: JSON.stringify({ q: query, num }),
   });
-  if (!res.ok) return [];
+  if (!res || !res.ok) return [];
   const data = (await res.json()) as { shopping?: SerperShoppingItem[] };
   const items = data.shopping || [];
   return items
@@ -75,12 +76,12 @@ export async function serperOrganic(
 ): Promise<ProductCandidate[]> {
   const key = process.env.SERPER_API_KEY;
   if (!key) return [];
-  const res = await fetch(`${BASE}/search`, {
+  const res = await fetchWithTimeout(`${BASE}/search`, {
     method: "POST",
     headers: { "X-API-KEY": key, "Content-Type": "application/json" },
     body: JSON.stringify({ q: query, num }),
   });
-  if (!res.ok) return [];
+  if (!res || !res.ok) return [];
   const data = (await res.json()) as { organic?: SerperOrganicItem[] };
   const items = data.organic || [];
   return items

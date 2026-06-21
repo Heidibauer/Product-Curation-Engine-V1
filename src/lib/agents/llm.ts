@@ -8,7 +8,15 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 let client: Anthropic | null = null;
 function getClient(): Anthropic | null {
   if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  if (!client)
+    client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      // Bounded retries + per-request timeout so a slow/flaky call can't hang
+      // the whole pipeline. 60s is comfortably under the function limit and a
+      // single evaluation batch never needs longer.
+      maxRetries: 2,
+      timeout: 60000,
+    });
   return client;
 }
 

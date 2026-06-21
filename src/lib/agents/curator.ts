@@ -22,9 +22,15 @@ export async function curate(
     const key = `${(p.brand || "").toLowerCase()}|${p.title.toLowerCase().slice(0, 30)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    if (p.evaluation.verdict === "pass" && deduped.length >= targetSize) continue;
     deduped.push(p);
   }
+
+  // Quality gate: a social-worthy collection is built only from products that
+  // cleared the bar (recommend/consider). We'd rather show a tight set of 5
+  // strong pieces than pad to 8 with mediocre ones. "pass" products are kept
+  // only as a last-resort backfill so the page is never empty.
+  const strong = deduped.filter((p) => p.evaluation.verdict !== "pass");
+  const pool = strong.length >= 4 ? strong : deduped;
 
   // 2. Diversity pass: greedily build the set, discouraging brand/price clustering.
   const selected: EvaluatedProduct[] = [];
@@ -37,7 +43,7 @@ export async function curate(
     return pos < 0.33 ? "low" : pos < 0.66 ? "mid" : "high";
   };
 
-  for (const p of deduped) {
+  for (const p of pool) {
     if (selected.length >= targetSize) break;
     const brand = (p.brand || p.retailer || "?").toLowerCase();
     const b = bucket(p.price);
@@ -49,9 +55,9 @@ export async function curate(
     brandCount[brand] = (brandCount[brand] || 0) + 1;
     priceBuckets[b] = (priceBuckets[b] || 0) + 1;
   }
-  // Backfill if diversity filtering left us short.
-  if (selected.length < targetSize) {
-    for (const p of deduped) {
+  // Backfill from the strong pool only if diversity filtering left us short.
+  if (selected.length < Math.min(targetSize, pool.length)) {
+    for (const p of pool) {
       if (selected.length >= targetSize) break;
       if (!selected.includes(p)) selected.push(p);
     }

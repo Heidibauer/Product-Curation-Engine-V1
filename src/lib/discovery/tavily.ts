@@ -6,6 +6,7 @@
 
 import type { ProductCandidate } from "@/lib/types";
 import { retailerFromUrl, retailerLabel, isAcceptableRetailer } from "./retailers";
+import { fetchWithTimeout } from "./http";
 
 const BASE = "https://api.tavily.com";
 
@@ -24,7 +25,7 @@ export async function tavilySearch(
 ): Promise<ProductCandidate[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return [];
-  const res = await fetch(`${BASE}/search`, {
+  const res = await fetchWithTimeout(`${BASE}/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -35,7 +36,7 @@ export async function tavilySearch(
       include_answer: false,
     }),
   });
-  if (!res.ok) return [];
+  if (!res || !res.ok) return [];
   const data = (await res.json()) as { results?: TavilyResult[] };
   return (data.results || [])
     .filter((r) => r.url && r.title)
@@ -67,12 +68,12 @@ export async function tavilyEnrich(url: string): Promise<{ context: string | nul
   const key = process.env.TAVILY_API_KEY;
   if (!key) return { context: null, price: null };
   try {
-    const res = await fetch(`${BASE}/extract`, {
+    const res = await fetchWithTimeout(`${BASE}/extract`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ api_key: key, urls: [url] }),
-    });
-    if (!res.ok) return { context: null, price: null };
+    }, 10000);
+    if (!res || !res.ok) return { context: null, price: null };
     const data = (await res.json()) as { results?: { raw_content?: string }[] };
     const raw = data.results?.[0]?.raw_content || "";
     const context = raw ? raw.replace(/\s+/g, " ").slice(0, 1200) : null;

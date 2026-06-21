@@ -6,12 +6,7 @@ import type { ProductCandidate, DiscoveryBrief, Evaluation, Feedback } from "@/l
 import { BIG_TICKET_TASTE } from "./taste";
 import { askJSON, llmAvailable } from "./llm";
 import { fuse, type TasteScores } from "@/lib/scoring/fusion";
-import {
-  reviewStrength,
-  priceFit,
-  dataCompleteness,
-  credibilityScore,
-} from "@/lib/scoring/signals";
+import { reviewStrength, priceFit, credibilityScore } from "@/lib/scoring/signals";
 
 interface RawEval {
   id: string;
@@ -133,22 +128,20 @@ One entry per product id. No text outside JSON.`;
 function heuristicTaste(p: ProductCandidate, brief: DiscoveryBrief): TasteScores {
   const rs = reviewStrength(p.rating, p.reviewCount);
   const pf = priceFit(p.price, brief);
-  const dc = dataCompleteness(p);
   const cred = credibilityScore(p);
   const cheapJunk = (p.price ?? 0) > 0 && (p.price ?? 0) < brief.budgetMin * 0.4;
   const flags: string[] = [];
   if (cheapJunk) flags.push("priced well below the band, possible low quality");
   if ((p.reviewCount ?? 0) < 25 && p.rating != null) flags.push("thin review volume");
-  if (/generic|basic|no-name|amazonbasics/i.test(`${p.title} ${p.brand}`)) flags.push("generic / unbranded");
+  if (/generic|basic|no-name|amazonbasics/i.test(`${p.title} ${p.brand ?? ""}`)) flags.push("generic / unbranded");
   return {
     aesthetics: Math.round((cred * 0.5 + rs * 0.5) * (cheapJunk ? 0.7 : 1)),
     value: pf,
     quality: rs,
-    desirability: Math.round((cred + rs) / 2 * (cheapJunk ? 0.7 : 1)),
+    desirability: Math.round(((cred + rs) / 2) * (cheapJunk ? 0.7 : 1)),
     trendFit: 60,
     rationale: `Scored from signals: ${p.rating ?? "?"}★ (${p.reviewCount ?? 0} reviews) at ${p.retailer ?? "unknown retailer"}, $${p.price ?? "?"}.`,
     redFlags: flags,
     collectionRole: pf > 80 ? "the value pick" : cred > 85 ? "the safe default" : "candidate",
-    ...(dc < 30 ? {} : {}),
   };
 }

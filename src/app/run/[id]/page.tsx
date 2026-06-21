@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import type { Run } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
 
 const TERMINAL = ["done", "error"];
 
-export default function RunPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function RunPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const [run, setRun] = useState<Run | null>(null);
   const [notFound, setNotFound] = useState(false);
 
